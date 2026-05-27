@@ -1,7 +1,12 @@
-import '../style/signup.css'
-let createacc=document.getElementById("create-acc-sec");
+const createacc = document.getElementById("create-acc-sec");
+const loggedname = localStorage.getItem("loggedname");
+const loggedUser = JSON.parse(localStorage.getItem("loggedUser") || "null");
 
-createacc.innerHTML=`
+if (loggedname && loggedUser) {
+  createacc.innerHTML = "";
+  createacc.style.display = "none";
+} else {
+  createacc.innerHTML = `
     <div id="create-acc">
       <div id="create-acc-img">
         <img src="/images/cars-sherrif.png" alt="sherriff">
@@ -12,8 +17,9 @@ createacc.innerHTML=`
       </div>
       <button id="create-acc-btn">Create Your Account</button>
     </div>
-`
-let caBtn=document.getElementById("create-acc-btn");
-caBtn.addEventListener("click",(e)=>{
-  window.location.href="./pages/signup.html";
-})
+  `;
+
+  document.getElementById("create-acc-btn").addEventListener("click", () => {
+    window.location.href = "/pages/signup.html";
+  });
+}

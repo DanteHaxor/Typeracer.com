@@ -11,7 +11,7 @@ document.querySelector('#navbar').innerHTML = `
       <li><a href="">Pit Stop</a></li>
       <li><a href="">Updates</a></li>
       <li><a href="">Discord</a></li>
-      <li><a href="/public/about.html">About</a></li>
+      <li><a href="/pages/about.html">About</a></li>
       <li><a href="">Merch</a></li>
   </div>
   <div id="nav-user">
@@ -164,14 +164,9 @@ let logo_btn = document.querySelector(".nav-logo")
  
 //  -----------------------------SOCKET WORKING----------------------------------//
 function connection(){
-  let socket = io("https://type-battle.onrender.com",{transports:["websocket"]});
+  let socket = io(baseURL, { transports: ["websocket"] });
   return socket;
 }
-
-// function connection(){
-//   let socket = io("http://localhost:8080/",{transports:["websocket"]});
-//   return socket;
-// }
 
 export default connection;
 

@@ -1,0 +1,117 @@
+*{
+    margin: 0px;
+    padding: 0px;
+    list-style: none;
+    text-decoration: none;
+    font-family: sans-serif;
+}
+body{
+    background-image: url(/images/bg_race.jpg);
+    background-size: 100%;
+}
+
+
+/* -------------------NAVBAR------------------- */
+nav{
+    background: #005894;
+    height: 4.5rem;
+    position:fixed;
+    top:0;
+    width: 100%;
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+}
+.nav-logo{
+    width:13rem;
+}
+.nav-logo>img{
+    width:100%;
+}
+#nav-menu{
+    /* border:1px solid red; */
+    display: flex;
+    width:25%;
+    justify-content: space-between;
+}
+#nav-menu li{
+    display: inline-block;
+    font-size: 18px;
+}
+#nav-menu li:hover{
+    text-decoration: underline;
+}
+#nav-menu a{
+    color: white;
+}
+#nav-user{
+    width:39%;
+    display: flex;
+    align-items:center;
+    /* border:1px solid red; */
+}
+#nav-user-avatar{
+    /* border:1px solid red; */
+    display: flex;
+    align-items: center;
+    background-color: #2dbcd5;
+    border-radius: 5px;
+    width:4.5rem;
+}
+#nav-user-avatar>img{
+    width:100%;
+}
+#nav-user-details{
+    /* border:1px solid red; */
+    width:80%;
+    margin-left: 15px;
+}
+#nav-user-auth{
+    /* border:1px solid red; */
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+#nav-acc-btn{
+    background-color: #ffd71f;
+    color: #005894;
+    font-weight: bold;
+    padding: 5px;
+    border:1px solid #ffd71f;
+    border-radius: 5px;
+    transition: background-color 1s;
+    transition: color 1s;
+}
+#nav-acc-btn:hover{
+    cursor: pointer;
+    background-color: black;
+    border:1px solid black;
+    color:white;
+}
+#nav-login-btn{
+    background-color: rgb(56, 169, 56);
+    color: white;
+    font-weight: bold;
+    padding: 5px 8px;
+    border:1px solid rgb(56, 169, 56);
+    border-radius: 5px;
+    transition: background-color 1s;
+    transition: color 1s;
+}
+#nav-login-btn:hover{
+    cursor: pointer;
+    background-color: green;
+    border:1px solid green;
+    color:#e9ff23;
+}
+#nav-wpm,#nav-races{
+    background-color: #239AB0;
+    border-radius: 5px;
+    padding: 5px 15px;
+    color: white;
+}
+@media (min-width: 200px) and (max-width: 599px) {
+    body{
+        background-repeat: no-repeat;
+    }
+}

@@ -58,6 +58,14 @@ To run this project, you will need to add the following environment variables to
 
 `PORT`
 
+### API base URL (local vs deployed)
+
+Edit `urls.config.js` at the project root:
+
+- `environment: "local"` — `http://localhost:1337` (use while testing)
+- `environment: "deployed"` — `https://type-battle.onrender.com` (use before pushing)
+
+All client API and Socket.io calls read from this file via `client/public/scripts/baseURL.js`.
 
 ## API Reference
 

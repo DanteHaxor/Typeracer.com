@@ -5,62 +5,48 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    
-    <script type="module" crossorigin src="/assets/index-9c7b1735.js"></script>
-    <link rel="stylesheet" href="/assets/index-3965002f.css">
     <title>Sign Up</title>
-    <style>
-        *{
-            margin: 0;
-            padding: 0;
-            font-family: Montserrat-Web, Montserrat, -apple-system, BlinkMacSystemFont, San Francisco, Roboto, Segoe UI, Helvetica Neue, sans-serif;
-        }
-    </style>
-    <link rel="stylesheet" href="../style/signup.css">
-
-    <script type="module" src="../scripts/signup.js"></script>
+    <link rel="stylesheet" href="/assets/index-3965002f.css">
+    <link rel="stylesheet" href="/css/all.css">
+    <link rel="stylesheet" href="/style/signup.css">
+    <script type="module" src="/scripts/signup.js"></script>
 </head>
 <body>
-    <!-- Navbar -->
-    <div id="navbar">   
-    </div>
-    
-    <!-- Registration Form Section -->
+    <div id="navbar"></div>
+
     <div id="registration" class="registration reg_form">
         <h2>Create Account</h2>
         <form id="registration_form" action="">
             <div class="register_inner_div">
                 <div>
                     <label for="fname">First Name *</label>
-                    <input type="text" id="fname" required>
+                    <input type="text" id="fname" name="fname" required>
                 </div>
                 <div>
                     <label for="lname">Last Name *</label>
-                    <input type="text" id="lname" required>
+                    <input type="text" id="lname" name="lname" required>
                 </div>
             </div>
-            <label for="email">Email Address *</label>
-            <input type="email" id="email" required>
+            <label for="email">Email Address *</label>
+            <input type="email" id="email" name="email" required>
             <label for="password">Password *</label>
-            <input type="password" id="password" required>
+            <input type="password" id="password" name="password" required>
 
             <input type="submit" value="Create Account" id="register">
             <hr>
-            <span>Already have an account? <a href="./login.html">log in.</a></span>
+            <span>Already have an account? <a href="/pages/login.html">log in.</a></span>
         </form>
-    </div>  
-    
-    <!-- Otp Form Section -->
+    </div>
+
     <div id="registration_otp" class="registration otp_form">
         <h2>Email Verification</h2>
         <form id="otp_form" action="">
-
             <label for="otp">Enter otp received on your email *</label>
-            <input type="text" id="otp" required>
-
+            <input type="text" id="otp" name="otp" required>
             <input type="submit" value="Validate Otp" id="register1">
         </form>
-    </div>  
-    <script type="module" src="../../main.js"></script>
+    </div>
+
+    <script type="module" src="/main.js"></script>
 </body>
 </html>

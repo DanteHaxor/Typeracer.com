@@ -1,5 +1,1 @@
-
-let baseURL= "https://type-battle.onrender.com";
-// let baseURL= "http://localhost:8080";
-
-export default baseURL;
+export { default, environment, URLS } from "/urls.config.js";
