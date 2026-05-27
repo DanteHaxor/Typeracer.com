@@ -1,119 +1,180 @@
-const express=require("express");
+const express = require("express");
 const UserModel = require("../models/user.model");
 require("dotenv").config();
-const client=require("../config/redis");
-const otpvalidator=require("../config/mailer")
-var genratedotp;
-const bcrypt=require("bcrypt");
-const jwt=require("jsonwebtoken");
+const { blacklistToken } = require("../config/redis");
+const sendOtp = require("../config/mailer");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const BlockuserModel = require("../models/block.model");
-const userrouter=express.Router();
+const userrouter = express.Router();
 
-// User Base Route
-userrouter.get("/",(req,res)=>{
-    res.send("user Router")
-})
+const pendingOtps = new Map();
+const OTP_TTL_MS = 10 * 60 * 1000;
 
-// User Rregistration email verification Route
-userrouter.post("/register_validate",async(req,res)=>{
-    let {name,email,password}=req.body;
-    try {
-        let data=await UserModel.findOne({"email":email});
-        if(data){
-            res.status(409).send({"msg":"User with same email address already exits."})
-        }else{
-            bcrypt.hash(password,5,async function(err, hash) {
-                if(err){
-                    console.log(err); 
-                }else{
-                    genratedotp=otpvalidator(email);
-                    res.status(200).send({"msg":"Otp sent to email.", otp:genratedotp, name, email, password:hash});  
-                }
-            });
-        }
-    } catch (error) {
-        console.log(error); 
-        res.status(404).send({"msg":"Something went wrong!",err:error.message});
+function getPendingOtp(email) {
+  const entry = pendingOtps.get(email);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) {
+    pendingOtps.delete(email);
+    return null;
+  }
+  return entry;
+}
+
+userrouter.get("/", (req, res) => {
+  res.send("user Router");
+});
+
+userrouter.get("/leaderboard", async (req, res) => {
+  try {
+    const users = await UserModel.find({ role: "user" })
+      .sort({ wpm: -1 })
+      .limit(10)
+      .select("name wpm races updatedAt");
+    res.status(200).send(users);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ msg: "Something went wrong!", err: error.message });
+  }
+});
+
+userrouter.post("/register_validate", async (req, res) => {
+  const { name, email, password } = req.body;
+  try {
+    const existing = await UserModel.findOne({ email });
+    if (existing) {
+      return res
+        .status(409)
+        .send({ msg: "User with same email address already exits." });
     }
-})
 
-// User Rregistration Route
-userrouter.post("/register",async(req,res)=>{
-    try {
-        let user=new UserModel(req.body);
-        await user.save();  
-        res.status(200).send({"msg":"Registration Succesful"});
-    } catch (error) {
-        console.log(error); 
-        res.status(404).send({"msg":"Something went wrong!",err:error.message});
+    const hash = await bcrypt.hash(password, 5);
+    const { otp, devMode, sentViaEmail } = await sendOtp(email);
+
+    pendingOtps.set(email, {
+      otp,
+      hash,
+      name,
+      expires: Date.now() + OTP_TTL_MS,
+    });
+
+    const msg = sentViaEmail
+      ? "OTP sent to your email."
+      : "OTP generated (dev mode). Check the server terminal and browser console (F12).";
+
+    res.status(200).send({
+      msg,
+      devMode,
+      ...(devMode ? { devOtp: otp } : {}),
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      msg: error.message || "Could not send OTP. Check email configuration.",
+    });
+  }
+});
+
+userrouter.post("/register", async (req, res) => {
+  const { name, email, password, otp } = req.body;
+  try {
+    const pending = getPendingOtp(email);
+    if (!pending) {
+      return res
+        .status(400)
+        .send({ msg: "OTP expired or not found. Please sign up again." });
     }
-})
-
-// User Login Route
-userrouter.post("/login",async(req,res)=>{
-    let {email,password}=req.body;
-    try {
-        let data=await UserModel.findOne({"email":email});
-        if(!data){
-            res.status(409).send({"msg":"User does not exits. Please register!"})
-        }else if(data){
-            let data1=await BlockuserModel.findOne({"user_id":data.id});
-            if(data1){
-                res.status(409).send({"msg":"Your account has been blocked"})
-            }else {
-            bcrypt.compare(password, data.password, function(err, result) {
-                if(result){
-                    let token=jwt.sign(
-                        {"email":data.email,"role":data.role},
-                        'typebattle', 
-                        { expiresIn: '1h' }
-                    );
-                    res.status(200).send({"msg":"Login successfull","token":token,"user":data});
-                }else {
-                    res.status(404).send({"msg":"Incorrect Password"}) 
-                }
-            });
-        }
+    if (String(otp) !== String(pending.otp)) {
+      return res.status(400).send({ msg: "Incorrect OTP." });
     }
-    } catch (error) {
-        console.log(error);
-        res.status(404).send({"msg":"Something went wrong!",err:error.message});
+
+    const user = new UserModel({
+      name: name || pending.name,
+      email,
+      password: password || pending.hash,
+    });
+    await user.save();
+    pendingOtps.delete(email);
+    res.status(200).send({ msg: "Registration Succesful" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ msg: "Something went wrong!", err: error.message });
+  }
+});
+
+userrouter.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const data = await UserModel.findOne({ email });
+    if (!data) {
+      return res
+        .status(409)
+        .send({ msg: "User does not exits. Please register!" });
     }
-})
 
-// User Race Update Route
-userrouter.get("/updateRaceCount/:id",async(req,res)=>{
-    let user_id=req.params.id;
-    try {
-        let data=await UserModel.findByIdAndUpdate({_id:user_id},{ $inc: {'races': 1 }});
-        let user=await UserModel.findOne({_id:user_id});
-        res.status(200).send({"msg":"races updated","user":user});
-    } catch (error) {
-        console.log(error);
-        res.status(404).send({"msg":"Something went wrong!",err:error.message});
+    const blocked = await BlockuserModel.findOne({ user_id: data.id });
+    if (blocked) {
+      return res.status(409).send({ msg: "Your account has been blocked" });
     }
-})
 
-// User Race Update Route
-userrouter.get("/updateWPM",async(req,res)=>{
-    let {user_id,wpm}=req.query;
-    console.log(user_id,wpm)
-    try {
-        let data=await UserModel.findByIdAndUpdate({_id:user_id},{wpm: wpm});
-        let user=await UserModel.findOne({_id:user_id});
-        res.status(200).send({"msg":"wpm updated","user":user});
-    } catch (error) {
-        console.log(error);
-        res.status(404).send({"msg":"Something went wrong!",err:error.message});
+    const match = await bcrypt.compare(password, data.password);
+    if (match) {
+      const token = jwt.sign(
+        { email: data.email, role: data.role },
+        "typebattle",
+        { expiresIn: "1h" }
+      );
+      return res
+        .status(200)
+        .send({ msg: "Login successfull", token, user: data });
     }
-})
+    res.status(404).send({ msg: "Incorrect Password" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ msg: "Something went wrong!", err: error.message });
+  }
+});
 
-// User Logout Route
-userrouter.get("/logout",async(req,res)=>{
-    let token=req.headers.authorization;
-   await client.SETEX(`${token}`,60*60,"true")
-   res.status(200).send({"msg":"logout successfull"});
-})
+userrouter.get("/updateRaceCount/:id", async (req, res) => {
+  const user_id = req.params.id;
+  try {
+    await UserModel.findByIdAndUpdate({ _id: user_id }, { $inc: { races: 1 } });
+    const user = await UserModel.findOne({ _id: user_id });
+    res.status(200).send({ msg: "races updated", user });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ msg: "Something went wrong!", err: error.message });
+  }
+});
 
+userrouter.get("/updateWPM", async (req, res) => {
+  const { user_id, wpm } = req.query;
+  const wpmNum = Number(wpm);
+  try {
+    const user = await UserModel.findById(user_id);
+    if (!user) {
+      return res.status(404).send({ msg: "User not found" });
+    }
+    if (wpmNum > (user.wpm || 0)) {
+      await UserModel.findByIdAndUpdate(user_id, { wpm: wpmNum });
+    }
+    const updated = await UserModel.findById(user_id);
+    res.status(200).send({ msg: "wpm updated", user: updated });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ msg: "Something went wrong!", err: error.message });
+  }
+});
 
-module.exports=userrouter;
+userrouter.get("/logout", async (req, res) => {
+  const token = req.headers.authorization;
+  try {
+    await blacklistToken(token);
+    res.status(200).send({ msg: "logout successfull" });
+  } catch (error) {
+    console.log("logout warning:", error.message);
+    res.status(200).send({ msg: "logout successfull" });
+  }
+});
+
+module.exports = userrouter;

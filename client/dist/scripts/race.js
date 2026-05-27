@@ -1,16 +1,24 @@
-import '../style/signup.css'
-let app=document.getElementById("app");
-// import outputmessage from '../../main';
-import connection from '../../main';
-let socket=connection();
+import connection from "/main.js";
+import baseURL from "./baseURL.js";
 
-import baseURL from "./baseURL.js"
+let socket;
+function getSocket() {
+  if (!socket) socket = connection();
+  return socket;
+}
 
+const app = document.getElementById("app");
 
-let loggedname=localStorage.getItem("loggedname");
+let loggedname = localStorage.getItem("loggedname");
+let loggedUser = JSON.parse(localStorage.getItem("loggedUser")) || null;
 
-// Display main content
-function mainContent(){
+function getRaceUsername() {
+  if (loggedname) return loggedname;
+  const random = Math.floor(Math.random() * 9000);
+  return "Guest " + random;
+}
+
+function mainContent() {
   return `
   <div id="race-global">
         <div id="race-global-body">
@@ -43,12 +51,11 @@ function mainContent(){
         </div>
 
       </div>
-  `
+  `;
 }
 
-// Display userRaceBar
-function userRaceBar(name, tag, avatar,j){
-    return `
+function userRaceBar(name, tag, avatar, j) {
+  return `
     <tr class="race-row">
         <td class="progressBarCont">
             <div class="progressBar">
@@ -66,30 +73,82 @@ function userRaceBar(name, tag, avatar,j){
         <td class="rankPanelCont">
             <div class="rankPanel">
                 <div id="rank${j}" class="ranks">&nbsp;</div>
-                <div id=${j} class="rankWpm rankWpm-self">0 wpm</div>
+                <div id="player-${j}" class="rankWpm rankWpm-self">0 wpm</div>
             </div>
         </td>
     </tr>
-    `
+    `;
 }
 
-app.innerHTML=`
+function renderRaceUsers(users, myUsername, playerRowMap) {
+  const tbody = document.querySelector("#tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  Object.keys(playerRowMap).forEach((key) => delete playerRowMap[key]);
+  users.forEach((u, j) => {
+    playerRowMap[u.username] = j;
+    const tag = u.username === myUsername ? "you" : "racer";
+    tbody.innerHTML += userRaceBar(
+      u.username,
+      tag,
+      "../images/avatars/basic-brown.svg",
+      j
+    );
+  });
+}
+
+function updateRaceProgress(raceObj, checkmsg, myUsername, playerRowMap, onFinish) {
+  if (!checkmsg) return;
+
+  for (const [name, stats] of Object.entries(raceObj)) {
+    const row = playerRowMap[name];
+    if (row === undefined) continue;
+
+    const wpm = stats.wpm || 0;
+    const progress = stats.progress || 0;
+    const wpmEl = document.getElementById(`player-${row}`);
+    const avatarEl = document.getElementById(`avatar${row}`);
+    if (wpmEl) wpmEl.innerText = wpm + " wpm";
+    if (!avatarEl) continue;
+
+    const padding = Math.min(900, (900 / checkmsg.length) * progress);
+    avatarEl.style.paddingLeft = padding + "px";
+  }
+
+  const sorted = Object.entries(raceObj)
+    .map(([name, stats]) => ({ name, ...stats }))
+    .sort((a, b) => b.progress - a.progress);
+
+  const finisher = sorted.find((p) => p.progress >= checkmsg.length);
+  if (!finisher) return;
+
+  const rank = sorted.findIndex((p) => p.name === finisher.name) + 1;
+  const row = playerRowMap[finisher.name];
+  const rankEl = row !== undefined ? document.getElementById(`rank${row}`) : null;
+  if (rankEl) rankEl.innerText = "rank " + rank;
+
+  if (finisher.name === myUsername) {
+    onFinish(finisher.wpm || 0, rank);
+  }
+}
+
+app.innerHTML = `
 <div id="race">
 ${mainContent()}
 </div>
-`
-let racebody=document.getElementById("race");
+`;
 
-let loggedUser=JSON.parse(localStorage.getItem("loggedUser")) || null;
+let racebody = document.getElementById("race");
 
-//------------------RACE GLOBAL------------------------//
-let raceGlobalBtn=document.getElementById("race-global-btn");
-raceGlobalBtn.addEventListener("click",(e)=>{
-    if(loggedUser){
-        increase_Races_In_UserModel(loggedUser._id)
-    }
-  racebody.innerHTML="";
-  racebody.innerHTML=`
+let raceGlobalBtn = document.getElementById("race-global-btn");
+raceGlobalBtn.addEventListener("click", () => {
+  if (loggedUser) {
+    increase_Races_In_UserModel(loggedUser._id);
+  }
+
+  const myUsername = getRaceUsername();
+
+  racebody.innerHTML = `
   <div class="race-cont">
         <div class="race-status">The race is on. Type the text below:</div>
         <div class="race-body">
@@ -100,98 +159,69 @@ raceGlobalBtn.addEventListener("click",(e)=>{
         </div>
         <div class="race-text-cont">
             <div class="given-text">
-                <p id="ptag"></p>
+                <p id="ptag">Loading race text...</p>
             </div>
             <div class="input-text">
-                <input id="ibox"  />
+                <input id="ibox" autocomplete="off" />
             </div>
         </div>
         <button id="back-btn">Back to Main Menu</button>
     </div>
-  `
+  `;
 
-  // --------------SOCKET WORKING------------------------//
   let checkmsg;
-    let random=Math.floor(Math.random() * 90);
-    let username="Guest "+`${random}`;
-  socket.emit("user",{username:"Guest "+`${random}`,"room":"guest"});
-  socket.on("number of users",(users)=>{
-    document.querySelector("#tbody").innerHTML="";
-    console.log(users);
-    for(let j=0; j<users.length; j++){
-        document.querySelector("#tbody").innerHTML+=userRaceBar(users[j].username, "you", "../images/avatars/basic-brown.svg",j);
+  let raceFinished = false;
+  const playerRowMap = {};
+
+  getSocket().emit("user", { username: myUsername, room: "guest" });
+
+  getSocket().on("number of users", (users) => {
+    renderRaceUsers(users, myUsername, playerRowMap);
+  });
+
+  getSocket().on("content", (msg) => {
+    checkmsg = msg;
+    document.getElementById("ptag").innerText = msg;
+  });
+
+  getSocket().on("status", ([raceObj, flag, , typer]) => {
+    if (raceFinished) return;
+    const ibox = document.getElementById("ibox");
+    if (typer === myUsername) {
+      ibox.style.background = flag === false ? "red" : "white";
     }
-  })
-  socket.on("content",(msg)=>{
-    console.log(msg);
-    checkmsg=msg;
-      let givenText=document.getElementById("ptag");
-      givenText.innerText=msg;
-  //   outputmessage(msg);
-  //   console.log(msg);
-  })
-  
-  document.getElementById("ibox").addEventListener("input",(e)=>{
-    let value=ibox.value;
-    ibox.style.background="white";
+    updateRaceProgress(raceObj, checkmsg, myUsername, playerRowMap, (wpm, rank) => {
+      raceFinished = true;
+      if (loggedUser) {
+        document.querySelector("#nav-wpm span").innerHTML = wpm;
+        increase_wpm_In_UserModel(loggedUser._id, wpm);
+      }
+      swal({
+        text: "You finished rank " + rank + " at " + wpm + " WPM",
+        icon: "success",
+        button: "ok",
+        timer: 2000,
+      });
+      setTimeout(() => {
+        window.location.href = "/index.html";
+      }, 2000);
+    });
+  });
 
-    socket.emit("type message",value);
-    socket.on("status",([raceObj,flag])=>{
-        if(flag==false){
-            ibox.style.background="red";
-        }
-        let i=0, k=1;
-        for(let x in raceObj){
-            let wpm=raceObj[x]["wpm"];
-            // console.log(wpm)
-            document.getElementById(`${i}`).innerText=wpm+" wpm";
-            let padding=((900)/checkmsg.length)*(wpm);  
-            // console.log(padding);
-            if(padding<900) {
-                document.getElementById(`avatar${i}`).style.paddingLeft=padding+"px";
-            }else if(padding>=900){
-                document.getElementById(`rank${i}`).innerText="rank "+k;
-                document.querySelector("#nav-wpm span").innerHTML=10;       
-                
-                if(loggedUser){               
-                    increase_wpm_In_UserModel(loggedUser._id,wpm);
-                }
-                swal({
-                    text: "you got "+k+" position",
-                    icon: "success",
-                    button: "ok",
-                    timer:1000
-                    })
-                    
-                    
-                    window.location.href = "../index.html"
-                    k++;
-                    break;
-                // alert("you got "+k+" position");
-                // window.location="../index.html";
-                // break;
-            }
-           
-            i++;
-        }
-        // console.log(raceObj)
-    })
-  })
+  document.getElementById("ibox").addEventListener("input", () => {
+    getSocket().emit("type message", document.getElementById("ibox").value);
+  });
 
+  document.getElementById("back-btn").addEventListener("click", () => {
+    window.location.href = "/index.html";
+  });
+});
 
-  let backBtn=document.getElementById("back-btn");
-  backBtn.addEventListener("click",(e)=>{
-    racebody.innerHTML="";
-    window.location.href="/index.html";
-  })
-})
+let racepracticeBtn = document.getElementById("race-practice-btn");
+racepracticeBtn.addEventListener("click", () => {
+  const displayName = loggedname || "Guest";
 
-
-//------------------RACE PRACTICE------------------------//
-let racepracticeBtn=document.getElementById("race-practice-btn");
-racepracticeBtn.addEventListener("click",(e)=>{
-  racebody.innerHTML="";
-  racebody.innerHTML=`
+  racebody.innerHTML = `
   <div class="race-cont">
   <div class="race-status">The race is on. Type the text below:</div>
   <div class="race-body">
@@ -200,9 +230,9 @@ racepracticeBtn.addEventListener("click",(e)=>{
               <tr class="race-row">
                   <td class="progressBarCont">
                       <div class="progressBar">
-                          <div class="avatar avatar-self">
+                          <div class="avatar avatar-self" id="practice-avatar">
                               <div class="nameContainer">
-                                  <div class="client-name">${loggedname?loggedname:"Guest"}</div>
+                                  <div class="client-name">${displayName}</div>
                                   <span class="client-label">(you)</span>
                               </div>
                               <div class="avatarContainer">
@@ -214,7 +244,7 @@ racepracticeBtn.addEventListener("click",(e)=>{
                   <td class="rankPanelCont">
                       <div class="rankPanel">
                           <div class="rank">&nbsp;</div>
-                          <div class="rankWpm rankWpm-self">0 wpm</div>
+                          <div id="practice-wpm" class="rankWpm rankWpm-self">0 wpm</div>
                       </div>
                   </td>
               </tr>
@@ -223,131 +253,92 @@ racepracticeBtn.addEventListener("click",(e)=>{
   </div>
   <div class="race-text-cont">
       <div class="given-text">
-          <p id="ptag"></p>
+          <p id="ptag">Loading race text...</p>
       </div>
       <div class="input-text">
-          <input id="ibox"  />
+          <input id="ibox" autocomplete="off" />
       </div>
   </div>
   <button id="back-btn">Back to Main Menu</button>
 </div>
-  `
+  `;
 
-// --------------SOCKET WORKING------------------------//
   let checkmsg;
+  let practiceStart = Date.now();
 
-  socket.emit("user enter in room",{username:"Practice"});
-  socket.on("content",(msg)=>{
-    console.log(msg);
-    checkmsg=msg;
-      let givenText=document.getElementById("ptag");
-      givenText.innerText=msg;
-  //   outputmessage(msg);`
-  //   console.log(msg);
-  })
-  
-  document.getElementById("ibox").addEventListener("input",(e)=>{
-    let value=ibox.value;
-    let length=value.length;
-    let wpm=0;
-    let flag=true;
-    ibox.style.background="white";
+  getSocket().emit("user enter in room", { username: displayName });
 
-    for(let i=0; i<length; i++){
-        if(value[i]!=checkmsg[i]){
-            ibox.style.background="red";
-            flag=false;
-        }else{
-            if(flag==true){
-            wpm++;
-            }
-        }
+  getSocket().on("content", (msg) => {
+    checkmsg = msg;
+    document.getElementById("ptag").innerText = msg;
+    practiceStart = Date.now();
+  });
+
+  document.getElementById("ibox").addEventListener("input", () => {
+    const value = document.getElementById("ibox").value;
+    let progress = 0;
+    let flag = true;
+    const ibox = document.getElementById("ibox");
+    ibox.style.background = "white";
+
+    for (let i = 0; i < value.length; i++) {
+      if (checkmsg && value[i] !== checkmsg[i]) {
+        ibox.style.background = "red";
+        flag = false;
+      } else if (flag) {
+        progress++;
+      }
     }
 
+    const elapsedMin = Math.max((Date.now() - practiceStart) / 60000, 1 / 60);
+    const wpm = Math.max(0, Math.round(progress / 5 / elapsedMin));
+    document.getElementById("practice-wpm").innerText = wpm + " wpm";
 
-    document.querySelector(".rankWpm-self").innerText=wpm+" wpm";
-
-        let padding=((900)/checkmsg.length)*(wpm);  
-        if(padding<900) {
-            document.querySelector(`.avatar`).style.paddingLeft=padding+"px";
-        }else if(padding>=900){
-            document.querySelector("#nav-wpm span").innerHTML=10;       
-        }
-  })
-
-
-
-  let backBtn=document.getElementById("back-btn");
-  backBtn.addEventListener("click",(e)=>{
-    racebody.innerHTML="";
-    window.location.href="/index.html";
-  })
-})
-
-
-
-//------------------RACE Friends------------------------//
-let racefriendsBtn=document.getElementById("race-friends-btn");
-racefriendsBtn.addEventListener("click",(e)=>{
-    window.location.href="../pages/roomNo.html";
-})
-
-// let socket = io("http://localhost:8080",{transports:["websocket"]});
-//friend join the room
-// socket.emit("user",{username,room});
-
-// //chat message
-// socket.on("message",(msg)=>{
-// console.log(msg);
-// })
-
-// //broadcast
-// socket.on("content",(msg)=>{
-// content=msg;
-// });
-
-
-
-// console.log(outputmessage())
-
-// Updating user races count 
-async function increase_Races_In_UserModel(user_id){
-    try {
-        let url = baseURL+"/api/user/updateRaceCount/"+user_id;
-        let res = await fetch(url);
-        let data = await res.json();
-        if(res.status==200){
-            // alert(data.msg);            
-            let loggedUser= data.user;
-            let loggedname=data.user.name;
-            localStorage.setItem("loggedname",loggedname);
-            localStorage.setItem("loggedUser",JSON.stringify(loggedUser));
-        }else{
-            alert(data.msg);
-        }
-
-    } catch (error) {
-        alert(error.message);
+    if (checkmsg) {
+      const padding = Math.min(900, (900 / checkmsg.length) * progress);
+      document.getElementById("practice-avatar").style.paddingLeft = padding + "px";
     }
+  });
+
+  document.getElementById("back-btn").addEventListener("click", () => {
+    window.location.href = "/index.html";
+  });
+});
+
+let racefriendsBtn = document.getElementById("race-friends-btn");
+racefriendsBtn.addEventListener("click", () => {
+  window.location.href = "/pages/roomNo.html";
+});
+
+async function increase_Races_In_UserModel(user_id) {
+  try {
+    const url = baseURL + "/api/user/updateRaceCount/" + user_id;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (res.status === 200) {
+      localStorage.setItem("loggedname", data.user.name);
+      localStorage.setItem("loggedUser", JSON.stringify(data.user));
+      loggedUser = data.user;
+    } else {
+      alert(data.msg);
+    }
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-// Updating user's WPM
-async function increase_wpm_In_UserModel(user_id,wpm){
-    try {
-        let url = baseURL+"/api/user/updateWPM?user_id="+user_id+"&wpm="+wpm;
-        let res = await fetch(url);
-        let data = await res.json();
-        if(res.status==200){
-            // alert(data.msg);            
-            let loggedUser= data.user;
-            let loggedname=data.user.name;
-            localStorage.setItem("loggedname",loggedname);
-            localStorage.setItem("loggedUser",JSON.stringify(loggedUser));
-        }else{
-            alert(data.msg);
-        }
-
-    } catch (error) {
-        alert(error.message);
+async function increase_wpm_In_UserModel(user_id, wpm) {
+  try {
+    const url =
+      baseURL + "/api/user/updateWPM?user_id=" + user_id + "&wpm=" + wpm;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (res.status === 200) {
+      localStorage.setItem("loggedname", data.user.name);
+      localStorage.setItem("loggedUser", JSON.stringify(data.user));
+      loggedUser = data.user;
     }
+  } catch (error) {
+    console.log(error);
+  }
 }

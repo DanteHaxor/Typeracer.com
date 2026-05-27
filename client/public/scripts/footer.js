@@ -1,5 +1,4 @@
-import '../style/signup.css'
-let footer=document.getElementById("footer-sec");
+const footer = document.getElementById("footer-sec");
 
 footer.innerHTML+=`
 <div id="footer">
@@ -13,7 +12,7 @@ footer.innerHTML+=`
             <a href="">FAQ</a>
         </div>
         <div id="footer-left">
-            <img src="../images/cars-footer.png" Dark Mode/>
+            <img src="/images/cars-footer.png" alt="footer" />
         </div>
     </div>
 </div>
